@@ -120,6 +120,27 @@ instance (Monad m, HasPrg r) => Applicative (FakerT r m) where
   pure = FakerT . const . pure
   f <*> a = f >>= (\xf -> a >>= (\xa -> return (xf xa)))
 
+instance (Alternative m, Monad m, HasPrg r) => Alternative (FakerT r m) where
+  empty = FakerT $ const empty
+  (FakerT a) <|> (FakerT b) = FakerT $ \x -> (a x) <|> (b x)
+
+{-- }
+instance (Semigroup (m a), Monad m, HasPrg r) => Semigroup (FakerT r m a) where
+  (FakerT a) <> (FakerT b) = FakerT $ \x -> (a x) <> (b x)
+
+instance (Monoid (m a), Monad m, HasPrg r) => Monoid (FakerT r m a) where
+  mempty = FakerT $ const mempty
+--}
+
+instance (Semigroup a, Monad m, HasPrg r) => Semigroup (FakerT r m a) where
+  (FakerT a) <> (FakerT b) = FakerT $ \x -> do
+    a' <- a x
+    b' <- b x
+    return $ a' <> b'
+
+instance (Monoid a, Monad m, HasPrg r) => Monoid (FakerT r m a) where
+  mempty = FakerT $ const $ pure mempty
+
 instance (Monad m, HasPrg r) => MonadReader r (FakerT r m) where
   --local r = over unFake (local r)
   reader = FakerT . fmap return

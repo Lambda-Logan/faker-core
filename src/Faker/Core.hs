@@ -1,4 +1,5 @@
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 --import Control.Lens.TH (makeClassy)
@@ -16,6 +17,7 @@ module Faker.Core
     weightedCoinFlip,
     listOf,
     variedLengthListOf,
+    someFunc,
   )
 where
 
@@ -113,13 +115,22 @@ pickWeightedFake = pickFake . fromList . (=<<) (\(i, x) -> replicate i x) . Fold
 weightedCoinFlip :: (Fake r m) => Float -> m Bool
 weightedCoinFlip p = fmap (< p) generateAny
 
+scrip :: (Semigroup (m Text), Fake r m) => m Text
+scrip = book <> pure " " <> chapter <> pure ":" <> verse
+  where
+    book = pickElement ["A", "B", "C"]
+    chapter = show <$> generateBetween (1 :: Int, 30)
+    verse = show <$> generateBetween (1 :: Int, 50)
+
+--p :: _
+--p = s `sepBy` "33"
+
 --growWhile :: (Fake r m, Functor f) => (a -> m Bool) -> f a -> m (Free f a)
 --growWhile pred things = undefined
 type Text = String
 
-someFunc :: IO ()
-someFunc = do
-  let fakePerson :: Faker Text = pickElement $ fromList ["Bob", "Alice", "Roberto", "Alisia"]
-  let fakePeople :: Faker [Text] = listOf 100 fakePerson
-  print $ runFaker fakePeople defaultPrg
+main :: IO ()
+main = do
+  let fakeScripts :: Faker [Text] = listOf 100 scrip
+  print $ runFaker fakeScripts defaultPrg
   return ()

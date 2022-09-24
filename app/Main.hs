@@ -4,4 +4,4 @@ module Main where
 import Faker.Core
 
 main :: IO ()
-main = return () -- someFunc
+main = someFunc
