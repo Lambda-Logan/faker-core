@@ -1,7 +1,6 @@
-module Main where
-
+module Main (main) where
 --import Lib
-import Faker.Core
+--import Faker.Core
 
 main :: IO ()
-main = someFunc
+main = return ()

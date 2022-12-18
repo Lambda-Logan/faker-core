@@ -1,13 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE MonoLocalBinds #-}
-{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
---import Control.Lens.TH (makeClassy)
-
---import Control.Monad.Free (Free)
-
--- import Data.Text (Text)
 module Faker.Core
   ( generateAny,
     generateBetween,
@@ -20,25 +14,23 @@ module Faker.Core
     variedLengthListOf,
     nDigitNumber,
     nDigitNumberBase,
-    someFunc,
+    nDigitStr,
+    coinFlip,
   )
 where
 
 import Control.Applicative
-import Control.Monad (join)
 import Control.Monad.Reader
 import qualified Data.Foldable as Fold
-import Data.Functor.Identity (Identity, runIdentity)
-import Data.List (filter, replicate)
 import Data.String (IsString (..))
 import Data.Vector (Vector, fromList, length, (!))
 import Faker
-import Lens.Micro (Lens, Lens', lens, over, set, _2)
+import Lens.Micro ( over, _2)
 import Lens.Micro.Extras (view)
-import System.Random (Random, StdGen (..), mkStdGen, random, randomR, split)
+import System.Random (Random, random, randomR)
 import Prelude hiding (length)
 
-coinFlip :: (Functor m, Monad m, Fake m) => m Bool
+coinFlip :: (Applicative m, Fake m) => m Bool
 coinFlip = fmap (< fiftyPercent) generateAny
   where
     fiftyPercent :: Float
@@ -64,7 +56,7 @@ generateBetween range = fst . randomR range . view stdGen <$> fask
 --
 -- > fakePeople :: (Fake r m) => m [Person]
 -- > fakePeople = listOf 77 fakePerson
-listOf :: (Applicative m, Fake m) => Int -> m a -> m [a]
+listOf :: (Applicative m) => Int -> m a -> m [a]
 listOf = replicateM
 
 -- | Generate list of 'n' fakes, but 'n' is faked as well. For example, real-world customers do not all have the same number of orders placed:
@@ -72,10 +64,10 @@ listOf = replicateM
 -- >
 -- > fakeCustomerOrders :: [Order]
 -- > fakeCustomerOrders =  variedLengthListOf (generateBetween (0, 100)) fakeOrder
-variedLengthListOf :: (Monad m, Fake m) => m Int -> m a -> m [a]
+variedLengthListOf :: (Monad m) => m Int -> m a -> m [a]
 variedLengthListOf fakeLength a = do
-  length <- fakeLength
-  listOf length a
+  lngth <- fakeLength
+  listOf lngth a
 
 --
 -- type SimpleFake = FakerT Prg Identity
@@ -90,7 +82,7 @@ pickElement :: (Applicative m, Fake m) => Vector a -> m a
 pickElement xs =
   if len == 0
     then error "Cannot pickElement from empty set"
-    else fmap (items !) $ generateBetween (0, len - 1)
+    else (items !) <$> generateBetween (0, len - 1)
   where
     items = xs --fromList $ Fold.toList xs
     len = length items
@@ -110,20 +102,14 @@ pickWeightedElement = pickWeightedFake . fmap (over _2 pure)
 
 -- | See docs for `pickFake` and `pickWeightedElement`.
 pickWeightedFake :: (Monad m, Fake m, Foldable t) => t (Int, m a) -> m a
-pickWeightedFake = pickFake . fromList . (=<<) (\(i, x) -> replicate i x) . Fold.toList
+pickWeightedFake = pickFake . fromList . (=<<) (uncurry replicate) . Fold.toList
 
 weightedCoinFlip :: (Applicative m, Fake m) => Float -> m Bool
 weightedCoinFlip p = fmap (< p) generateAny
 
-scrip :: (Semigroup (m Text), Applicative m, Fake m) => m Text
-scrip = book <> pure " " <> chapter <> pure ":" <> verse
-  where
-    book = pickElement ["A", "B", "C"]
-    chapter = show <$> generateBetween (1 :: Int, 30)
-    verse = show <$> generateBetween (1 :: Int, 50)
 
 nDigitNumberBase :: (Integral a, Random a, Applicative m, Fake m) => a -> a -> m a
-nDigitNumberBase base 0 = error "Cannot generate 0 digits"
+nDigitNumberBase _ 0 = error "Cannot generate 0 digits"
 nDigitNumberBase base n = generateBetween (base ^ (n - 1), (base ^ n) - 1)
 
 nDigitNumber :: (Integral a, Random a, Applicative m, Fake m) => a -> m a
@@ -132,15 +118,21 @@ nDigitNumber = nDigitNumberBase 10
 nDigitStr :: (IsString s, Applicative m, Fake m) => Int -> m s
 nDigitStr n = fmap (fromString . show) (nDigitNumber n)
 
+
+
+{-- 
+type Text = String
+
+scrip :: (Semigroup (m Text), Applicative m, Fake m) => m Text
+scrip = book <> pure " " <> chapter <> pure ":" <> verse
+  where
+    book = pickElement ["A", "B", "C"]
+    chapter = show <$> generateBetween (1 :: Int, 30)
+    verse = show <$> generateBetween (1 :: Int, 50)
+
 phoneNumber :: (Applicative m, Fake m, Semigroup (m Text)) => m Text
 phoneNumber = pure "(" <> nDigitStr 3 <> pure ")-" <> nDigitStr 3 <> pure "-" <> nDigitStr 4
 
---p :: _
---p = s `sepBy` "33"
-
---growWhile :: (Fake r m, Functor f) => (a -> m Bool) -> f a -> m (Free f a)
---growWhile pred things = undefined
-type Text = String
 
 someFunc :: IO ()
 someFunc = do
@@ -151,3 +143,4 @@ someFunc = do
 
   print $ runFaker (listOf 300 phoneNumber) defaultPrg
   return ()
+--}

@@ -1,12 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MonoLocalBinds #-}
--- {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
-
+{-# LANGUAGE MultiParamTypeClasses #-}
 -- | This module exports the most basic functionality for creating data from pseudo random generators, as well as classy lenses for doing so.
 --
 -- Working with PRGs through lenses is a lovely experience. For example, if you would like to use a different PRG within a local context, you might create one from an `Int` using `HasStdGen`.
@@ -45,22 +43,13 @@ module Faker
 where
 
 import Control.Applicative
-import Control.Monad (join)
-import Control.Monad.Cont (MonadCont (..))
-import Control.Monad.Except (MonadError (..))
-import Control.Monad.Fail (MonadFail (..))
-import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader
 import Control.Monad.State (MonadState (..))
-import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Writer (MonadWriter (..))
-import qualified Data.Foldable as Fold
 import Data.Functor.Identity (Identity, runIdentity)
-import Data.List (filter, replicate)
-import Data.Vector (Vector, fromList, length, (!))
-import Lens.Micro (Lens, Lens', lens, over, set, _2)
+import Lens.Micro (Lens, Lens', lens, set)
 import Lens.Micro.Extras (view)
-import System.Random (Random, StdGen (..), initStdGen, mkStdGen, random, randomR, split)
+import System.Random (StdGen, initStdGen, mkStdGen,split)
 import Prelude hiding (length)
 
 -- | A newtype around `StdGen` that implements both `HashStdGen` and `HasPrg`
@@ -78,12 +67,6 @@ newtype Prg = Prg
 -- generate :: (MonadIO io) => Prg ->
 -- instance Fake (FakerT r m) where
 --  freader = FakerT . fmap return
-
---useEvilPrg :: (Fake m) => m a -> m a
---useEvilPrg = local (set stdGen $ mkStdGen 666)
-
---instance (HasPrg r) => Fake r (Reader)
-type VanillaReaderT r m a = (HasPrg r) => ReaderT r m a
 
 -- | The default type that implements `Fake` is `FakerT`.  A vanilla reader monad could also be used, but may give repetitive results in some cases.
 --
@@ -128,11 +111,12 @@ instance (Applicative f) => Fake (FakerT Prg f) where
 joinFaker :: (Monad m, HasPrg r) => FakerT r m (FakerT r m a) -> FakerT r m a
 joinFaker (FakerT f) = FakerT g
   where
-    g r = join $ fmap (\f -> f prgA) $ (fmap (fmap _unFake) f) prgB
+    g r = join $ (\k -> k prgA) <$> fmap (fmap _unFake) f prgB
       where
         (genA, genB) = split $ view (prg . stdGen) r
         (prgA, prgB) = (set (prg . stdGen) genA r, set (prg . stdGen) genB r)
 
+defaultPrg :: Prg
 defaultPrg = Prg $ mkStdGen 314156
 
 instance (Functor m) => Functor (FakerT r m) where
@@ -184,24 +168,11 @@ instance (HasPrg r, MonadWriter w m) => MonadWriter w (FakerT r m) where
   listen (FakerT run) = FakerT $ listen . run
   pass (FakerT run) = FakerT $ pass . run
 
-{-
-class HasIntSeed x where
-  intSeed :: Lens' x Int
-
-instance HasIntSeed StdGen where
-  intSeed =
--}
-modifyStdGen x = x
 
 -- | The Faker analog to `initStdGen`.
 initPrg :: MonadIO m => m Prg
 initPrg = Prg <$> initStdGen
 
-fakeEnvTest :: (HasPrg r, Fake m, MonadReader r m) => m ()
-fakeEnvTest = do
-  env <- ask
-  let newEnv = over (prg . stdGen) modifyStdGen env
-  return ()
 
 -- | Like `FakerT`, but sans monadic effects.
 type Faker = FakerT Prg Identity
