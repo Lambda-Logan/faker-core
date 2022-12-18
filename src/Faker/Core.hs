@@ -25,7 +25,7 @@ import qualified Data.Foldable as Fold
 import Data.String (IsString (..))
 import Data.Vector (Vector, fromList, length, (!))
 import Faker
-import Lens.Micro ( over, _2)
+import Lens.Micro (over, _2)
 import Lens.Micro.Extras (view)
 import System.Random (Random, random, randomR)
 import Prelude hiding (length)
@@ -107,7 +107,6 @@ pickWeightedFake = pickFake . fromList . (=<<) (uncurry replicate) . Fold.toList
 weightedCoinFlip :: (Applicative m, Fake m) => Float -> m Bool
 weightedCoinFlip p = fmap (< p) generateAny
 
-
 nDigitNumberBase :: (Integral a, Random a, Applicative m, Fake m) => a -> a -> m a
 nDigitNumberBase _ 0 = error "Cannot generate 0 digits"
 nDigitNumberBase base n = generateBetween (base ^ (n - 1), (base ^ n) - 1)
@@ -118,9 +117,7 @@ nDigitNumber = nDigitNumberBase 10
 nDigitStr :: (IsString s, Applicative m, Fake m) => Int -> m s
 nDigitStr n = fmap (fromString . show) (nDigitNumber n)
 
-
-
-{-- 
+{--
 type Text = String
 
 scrip :: (Semigroup (m Text), Applicative m, Fake m) => m Text
@@ -132,7 +129,6 @@ scrip = book <> pure " " <> chapter <> pure ":" <> verse
 
 phoneNumber :: (Applicative m, Fake m, Semigroup (m Text)) => m Text
 phoneNumber = pure "(" <> nDigitStr 3 <> pure ")-" <> nDigitStr 3 <> pure "-" <> nDigitStr 4
-
 
 someFunc :: IO ()
 someFunc = do

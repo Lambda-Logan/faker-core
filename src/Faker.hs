@@ -1,10 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MonoLocalBinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+
 -- | This module exports the most basic functionality for creating data from pseudo random generators, as well as classy lenses for doing so.
 --
 -- Working with PRGs through lenses is a lovely experience. For example, if you would like to use a different PRG within a local context, you might create one from an `Int` using `HasStdGen`.
@@ -49,7 +50,7 @@ import Control.Monad.Writer (MonadWriter (..))
 import Data.Functor.Identity (Identity, runIdentity)
 import Lens.Micro (Lens, Lens', lens, set)
 import Lens.Micro.Extras (view)
-import System.Random (StdGen, initStdGen, mkStdGen,split)
+import System.Random (StdGen, initStdGen, mkStdGen, split)
 import Prelude hiding (length)
 
 -- | A newtype around `StdGen` that implements both `HashStdGen` and `HasPrg`
@@ -168,11 +169,9 @@ instance (HasPrg r, MonadWriter w m) => MonadWriter w (FakerT r m) where
   listen (FakerT run) = FakerT $ listen . run
   pass (FakerT run) = FakerT $ pass . run
 
-
 -- | The Faker analog to `initStdGen`.
 initPrg :: MonadIO m => m Prg
 initPrg = Prg <$> initStdGen
-
 
 -- | Like `FakerT`, but sans monadic effects.
 type Faker = FakerT Prg Identity
