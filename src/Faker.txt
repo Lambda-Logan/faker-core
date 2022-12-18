@@ -46,14 +46,7 @@ where
 
 import Control.Applicative
 import Control.Monad (join)
-import Control.Monad.Cont (MonadCont (..))
-import Control.Monad.Except (MonadError (..))
-import Control.Monad.Fail (MonadFail (..))
-import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Reader
-import Control.Monad.State (MonadState (..))
-import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Writer (MonadWriter (..))
 import qualified Data.Foldable as Fold
 import Data.Functor.Identity (Identity, runIdentity)
 import Data.List (filter, replicate)
@@ -114,7 +107,7 @@ runFaker (FakerT f) = runIdentity . f
 
 -- | Like `runFaker`, only allows monadic effects.
 runFakerT :: FakerT r m a -> r -> m a
-runFakerT (FakerT run) = run
+runFakerT = runReaderT . view unFake
 
 class Fake m where
   freader :: (Prg -> a) -> m a
@@ -135,27 +128,6 @@ joinFaker (FakerT f) = FakerT g
 
 defaultPrg = Prg $ mkStdGen 314156
 
-instance (Functor m) => Functor (FakerT r m) where
-  fmap f (FakerT g) = FakerT $ fmap f . g
-
-instance (Monad m, HasPrg r) => Monad (FakerT r m) where
-  return = FakerT . const . return
-  m >>= k = joinFaker $ k <$> m
-
-instance (Monad m, HasPrg r) => Applicative (FakerT r m) where
-  pure = FakerT . const . pure
-  f <*> a = f >>= (\xf -> a >>= (\xa -> return (xf xa)))
-
-instance (Alternative m, Monad m, HasPrg r) => Alternative (FakerT r m) where
-  empty = FakerT $ const empty
-  (FakerT a) <|> (FakerT b) = FakerT $ \x -> (a x) <|> (b x)
-
-instance (Semigroup (m a)) => Semigroup (FakerT r m a) where
-  (FakerT a) <> (FakerT b) = FakerT $ \x -> (a x) <> (b x)
-
-instance (Monoid (m a)) => Monoid (FakerT r m a) where
-  mempty = FakerT $ const mempty
-
 class HasStdGen x where
   stdGen :: Lens' x StdGen
 
@@ -170,19 +142,6 @@ class HasPrg x where
 
 instance HasPrg Prg where
   prg = id
-
-instance (HasPrg r, MonadState s m) => MonadState s (FakerT r m) where
-  get = FakerT $ const get
-  put s = FakerT $ const $ put s
-
-instance (HasPrg r, MonadReader r' m) => MonadReader r' (FakerT r m) where
-  local f (FakerT run) = FakerT $ local f . run
-  ask = FakerT $ const ask
-
-instance (HasPrg r, MonadWriter w m) => MonadWriter w (FakerT r m) where
-  tell w = FakerT $ const $ tell w
-  listen (FakerT run) = FakerT $ listen . run
-  pass (FakerT run) = FakerT $ pass . run
 
 {-
 class HasIntSeed x where

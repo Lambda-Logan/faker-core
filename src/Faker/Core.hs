@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,8 @@ module Faker.Core
     weightedCoinFlip,
     listOf,
     variedLengthListOf,
+    nDigitNumber,
+    nDigitNumberBase,
     someFunc,
   )
 where
@@ -27,6 +30,7 @@ import Control.Monad.Reader
 import qualified Data.Foldable as Fold
 import Data.Functor.Identity (Identity, runIdentity)
 import Data.List (filter, replicate)
+import Data.String (IsString (..))
 import Data.Vector (Vector, fromList, length, (!))
 import Faker
 import Lens.Micro (Lens, Lens', lens, over, set, _2)
@@ -34,7 +38,7 @@ import Lens.Micro.Extras (view)
 import System.Random (Random, StdGen (..), mkStdGen, random, randomR, split)
 import Prelude hiding (length)
 
-coinFlip :: (Fake r m) => m Bool
+coinFlip :: (Functor m, Monad m, Fake m) => m Bool
 coinFlip = fmap (< fiftyPercent) generateAny
   where
     fiftyPercent :: Float
@@ -47,24 +51,20 @@ coinFlip = fmap (< fiftyPercent) generateAny
 -- >   where
 -- >     fiftyPercent :: Float
 -- >     fiftyPercent = 0.50
-generateAny :: (Random a, Fake r m) => m a
-generateAny = do
-  gen <- asks (view $ prg . stdGen)
-  return $ fst $ random gen
+generateAny :: (Random a, Applicative m, Fake m) => m a
+generateAny = fst . random . view stdGen <$> fask
 
 -- | Generate an item, usually a number, between the upper and lower bound (inclusive)
 --
 -- > userAge <- generateBetween (18, 80)
-generateBetween :: (Random a, Fake r m) => (a, a) -> m a
-generateBetween range = do
-  gen <- asks (view $ prg . stdGen)
-  return $ fst $ randomR range gen
+generateBetween :: (Applicative m, Random a, Fake m) => (a, a) -> m a
+generateBetween range = fst . randomR range . view stdGen <$> fask
 
 -- | Generates a list of 'n' fakes
 --
 -- > fakePeople :: (Fake r m) => m [Person]
 -- > fakePeople = listOf 77 fakePerson
-listOf :: (Fake r m) => Int -> m a -> m [a]
+listOf :: (Applicative m, Fake m) => Int -> m a -> m [a]
 listOf = replicateM
 
 -- | Generate list of 'n' fakes, but 'n' is faked as well. For example, real-world customers do not all have the same number of orders placed:
@@ -72,7 +72,7 @@ listOf = replicateM
 -- >
 -- > fakeCustomerOrders :: [Order]
 -- > fakeCustomerOrders =  variedLengthListOf (generateBetween (0, 100)) fakeOrder
-variedLengthListOf :: (Fake r m) => m Int -> m a -> m [a]
+variedLengthListOf :: (Monad m, Fake m) => m Int -> m a -> m [a]
 variedLengthListOf fakeLength a = do
   length <- fakeLength
   listOf length a
@@ -86,7 +86,7 @@ variedLengthListOf fakeLength a = do
 -- >
 -- > fakeFood :: (Fake r m) => m String
 -- > fakeFood = pickElement ["pizza", "salad", "kimchi", "borscht"]
-pickElement :: (Fake r m) => Vector a -> m a
+pickElement :: (Applicative m, Fake m) => Vector a -> m a
 pickElement xs =
   if len == 0
     then error "Cannot pickElement from empty set"
@@ -96,7 +96,7 @@ pickElement xs =
     len = length items
 
 -- | Like `pickElement`, only more general. Each element of the given vector is a fake generator.
-pickFake :: (Fake r m) => Vector (m a) -> m a
+pickFake :: (Monad m, Fake m) => Vector (m a) -> m a
 pickFake = join . pickElement
 
 -- | Like `pickElement`, only you exactly control the likelihood of picking each individual element. NOTE: Space taken is O(N) where N is the sum of the weights, not the number of unique elements.
@@ -105,22 +105,35 @@ pickFake = join . pickElement
 -- >
 -- > handedness :: (Fake r m) => m Handedness
 -- > handedness = pickWeightedElement [(11, LeftHanded), (89, RightHanded)]
-pickWeightedElement :: (Fake r m, Foldable t, Functor t) => t (Int, a) -> m a
+pickWeightedElement :: (Monad m, Fake m, Foldable t, Functor t) => t (Int, a) -> m a
 pickWeightedElement = pickWeightedFake . fmap (over _2 pure)
 
 -- | See docs for `pickFake` and `pickWeightedElement`.
-pickWeightedFake :: (Fake r m, Foldable t) => t (Int, m a) -> m a
+pickWeightedFake :: (Monad m, Fake m, Foldable t) => t (Int, m a) -> m a
 pickWeightedFake = pickFake . fromList . (=<<) (\(i, x) -> replicate i x) . Fold.toList
 
-weightedCoinFlip :: (Fake r m) => Float -> m Bool
+weightedCoinFlip :: (Applicative m, Fake m) => Float -> m Bool
 weightedCoinFlip p = fmap (< p) generateAny
 
-scrip :: (Semigroup (m Text), Fake r m) => m Text
+scrip :: (Semigroup (m Text), Applicative m, Fake m) => m Text
 scrip = book <> pure " " <> chapter <> pure ":" <> verse
   where
     book = pickElement ["A", "B", "C"]
     chapter = show <$> generateBetween (1 :: Int, 30)
     verse = show <$> generateBetween (1 :: Int, 50)
+
+nDigitNumberBase :: (Integral a, Random a, Applicative m, Fake m) => a -> a -> m a
+nDigitNumberBase base 0 = error "Cannot generate 0 digits"
+nDigitNumberBase base n = generateBetween (base ^ (n - 1), (base ^ n) - 1)
+
+nDigitNumber :: (Integral a, Random a, Applicative m, Fake m) => a -> m a
+nDigitNumber = nDigitNumberBase 10
+
+nDigitStr :: (IsString s, Applicative m, Fake m) => Int -> m s
+nDigitStr n = fmap (fromString . show) (nDigitNumber n)
+
+phoneNumber :: (Applicative m, Fake m, Semigroup (m Text)) => m Text
+phoneNumber = pure "(" <> nDigitStr 3 <> pure ")-" <> nDigitStr 3 <> pure "-" <> nDigitStr 4
 
 --p :: _
 --p = s `sepBy` "33"
@@ -129,8 +142,12 @@ scrip = book <> pure " " <> chapter <> pure ":" <> verse
 --growWhile pred things = undefined
 type Text = String
 
-main :: IO ()
-main = do
-  let fakeScripts :: Faker [Text] = listOf 100 scrip
+someFunc :: IO ()
+someFunc = do
+  let fakeScripts :: Faker [Text] = listOf 10 scrip
   print $ runFaker fakeScripts defaultPrg
+  let two :: Int = 2
+  print $ runFaker (listOf 300 $ nDigitNumber two) defaultPrg
+
+  print $ runFaker (listOf 300 phoneNumber) defaultPrg
   return ()
